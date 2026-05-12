@@ -1,0 +1,907 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>プロジェクト統合ダッシュボード</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f0f2f5;--sur:#fff;--bdr:#e2e6ea;--txt:#1c2331;--muted:#6c757d;
+  --blue:#185FA5;--blue-bg:#e8f0fb;--blue-dk:#0C447C;
+  --green:#1e7e34;--green-bg:#e6f4ea;
+  --amber:#a05c00;--amber-bg:#fff3cd;
+  --red:#b02020;--red-bg:#fdecea;
+  --orange:#c05000;--orange-bg:#fff0e6;
+  --r:10px;--rs:6px;
+}
+body{font-family:"Hiragino Kaku Gothic ProN","Meiryo",sans-serif;background:var(--bg);color:var(--txt);font-size:14px;min-height:100vh}
+
+/* ヘッダー */
+header{background:var(--sur);border-bottom:1px solid var(--bdr);padding:0 24px;display:flex;align-items:center;justify-content:space-between;height:58px;position:sticky;top:0;z-index:100;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+.logo{display:flex;align-items:center;gap:10px}
+.logo-icon{width:30px;height:30px;background:var(--blue);border-radius:7px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:17px}
+.logo-text h1{font-size:14px;font-weight:700;line-height:1.2}
+.logo-text .pj{font-size:11px;color:var(--muted)}
+.hdr-r{display:flex;align-items:center;gap:8px}
+.last-upd{font-size:11px;color:var(--muted)}
+.btn{display:inline-flex;align-items:center;gap:5px;padding:6px 13px;border-radius:var(--rs);font-size:12px;font-weight:600;cursor:pointer;border:1px solid var(--bdr);background:var(--sur);color:var(--txt);transition:all .15s}
+.btn:hover{background:var(--bg)}
+.btn-p{background:var(--blue);color:#fff;border:none}.btn-p:hover{background:var(--blue-dk)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+input[type=file]{display:none}
+
+/* セットアップ */
+#setup{padding:32px 24px;max-width:860px;margin:0 auto}
+.setup-ttl{font-size:18px;font-weight:700;margin-bottom:6px}
+.setup-sub{color:var(--muted);font-size:13px;margin-bottom:24px}
+.dg{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.dc{border:2px dashed #b0bec5;border-radius:var(--r);padding:28px 16px;text-align:center;background:var(--sur);cursor:pointer;transition:all .2s}
+.dc:hover,.dc.drag-over{border-color:var(--blue);background:var(--blue-bg)}
+.dc.loaded{border-color:var(--green);background:var(--green-bg);border-style:solid}
+.dc-icon{font-size:32px;margin-bottom:10px}
+.dc-name{font-size:13px;font-weight:700;margin-bottom:5px}
+.dc-sub{font-size:11px;color:var(--muted);margin-bottom:12px;line-height:1.5}
+.dc-file{font-size:11px;color:var(--green);margin-top:6px;font-weight:600}
+
+/* ログバー */
+#log-bar{display:none;align-items:center;gap:8px;padding:9px 16px;border-radius:var(--rs);font-size:13px;margin:0 24px 14px;border:1px solid var(--bdr);background:var(--sur);color:var(--muted)}
+#log-bar.running{background:var(--blue-bg);border-color:#90b8ef;color:var(--blue-dk)}
+#log-bar.success{background:var(--green-bg);border-color:#93d5a2;color:var(--green)}
+#log-bar.error{background:var(--red-bg);border-color:#f5b7b1;color:var(--red)}
+
+/* メイン */
+main{max-width:1100px;margin:0 auto;padding:18px 24px;display:none}
+
+/* タブ */
+.tab-bar{display:flex;border-bottom:2px solid var(--bdr);margin-bottom:18px}
+.tab{padding:8px 18px;font-size:13px;font-weight:600;cursor:pointer;border:none;background:none;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .15s}
+.tab.active{color:var(--blue);border-bottom-color:var(--blue)}
+.tab-panel{display:none}.tab-panel.active{display:block}
+
+/* 健康度バナー */
+.hbanner{border-radius:var(--r);padding:14px 20px;margin-bottom:16px;display:flex;align-items:center;gap:14px;border:1px solid}
+.hb-green{background:#EAF3DE;border-color:#97C459}
+.hb-amber{background:#FAEEDA;border-color:#EF9F27}
+.hb-red{background:#FCEBEB;border-color:#F09595}
+.hb-icon{font-size:28px;flex-shrink:0}
+.hb-label{font-size:18px;font-weight:700;margin-bottom:2px}
+.hb-green .hb-label{color:#27500A}
+.hb-amber .hb-label{color:#633806}
+.hb-red .hb-label{color:#791F1F}
+.hb-desc{font-size:12px}
+.hb-green .hb-desc{color:#3B6D11}
+.hb-amber .hb-desc{color:#854F0B}
+.hb-red .hb-desc{color:#A32D2D}
+.hb-crit{margin-left:auto;font-size:11px;text-align:right;flex-shrink:0;line-height:1.7}
+.hb-green .hb-crit{color:#3B6D11}
+.hb-amber .hb-crit{color:#854F0B}
+.hb-red .hb-crit{color:#A32D2D}
+
+/* 3カラム */
+.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:14px}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
+.sc{background:var(--sur);border:0.5px solid var(--bdr);border-radius:var(--r);overflow:hidden}
+.sc-hd{padding:9px 14px;border-bottom:0.5px solid var(--bdr);display:flex;align-items:center;justify-content:space-between}
+.sc-ttl{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:flex;align-items:center;gap:5px}
+.sc-body{padding:12px 14px}
+
+/* カード */
+.card{background:var(--sur);border:0.5px solid var(--bdr);border-radius:var(--r);padding:14px;margin-bottom:12px}
+.card:last-child{margin-bottom:0}
+.card-no-mb{margin-bottom:0}
+.ct{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:10px}
+
+/* 進捗バー */
+.pb-row{margin-bottom:9px}
+.pb-label{display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px}
+.pb-bg{background:#e9ecef;border-radius:5px;height:11px;overflow:hidden;position:relative}
+.pb-fill{height:100%;border-radius:5px;transition:width .7s}
+.pb-plan{position:absolute;top:0;height:100%;width:2px;background:rgba(0,0,0,.35)}
+.pb-hint{display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-top:3px}
+
+/* stat行 */
+.sr{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:0.5px solid var(--bdr);font-size:12px}
+.sr:last-child{border-bottom:none}
+.sr-l{color:var(--muted)}
+.sr-v{font-weight:600;color:var(--txt)}
+.ok{color:#1e7e34}.warn{color:#a05c00}.bad{color:#b02020}.blue{color:#185FA5}
+
+/* 懸念リスト */
+.concern-row{display:flex;align-items:flex-start;gap:8px;padding:8px 0;border-bottom:0.5px solid var(--bdr);font-size:12px}
+.concern-row:last-child{border-bottom:none}
+.ci-icon{font-size:15px;flex-shrink:0;margin-top:1px}
+.ci-b{flex:1;min-width:0}
+.ci-ttl{font-weight:600;color:var(--txt);margin-bottom:2px}
+.ci-sub{font-size:11px;color:var(--muted)}
+.src-tag{font-size:10px;font-weight:600;padding:2px 7px;border-radius:20px;white-space:nowrap;flex-shrink:0}
+
+/* バッジ */
+.badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;white-space:nowrap}
+.b-red{background:var(--red-bg);color:var(--red)}
+.b-amber{background:var(--amber-bg);color:var(--amber)}
+.b-orange{background:var(--orange-bg);color:var(--orange)}
+.b-blue{background:var(--blue-bg);color:var(--blue-dk)}
+.b-green{background:var(--green-bg);color:var(--green)}
+.b-gray{background:#f1f3f5;color:var(--muted)}
+
+/* 左右レイアウト */
+.split{display:grid;grid-template-columns:280px 1fr;gap:12px}
+.left-col{display:flex;flex-direction:column;gap:12px}
+.right-col{display:flex;flex-direction:column;gap:12px}
+
+/* フィルターバー */
+.fb{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:8px 12px;background:var(--bg);border-radius:var(--rs);margin-bottom:8px}
+.fb label{font-size:11px;font-weight:700;color:var(--muted);white-space:nowrap}
+.fb select{font-size:11px;padding:3px 6px;border:0.5px solid var(--bdr);border-radius:var(--rs);background:var(--sur);color:var(--txt);cursor:pointer}
+.fb select:focus{outline:none;border-color:var(--blue)}
+.f-count{font-size:11px;color:var(--muted);margin-left:auto}
+.btn-reset{font-size:11px;padding:3px 9px;border-radius:var(--rs);background:var(--sur);color:var(--muted);border:0.5px solid var(--bdr);cursor:pointer}
+.btn-reset:hover{background:var(--bg)}
+
+/* 複数選択チップ */
+.chips{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px}
+.chip{font-size:11px;padding:3px 10px;border-radius:20px;border:0.5px solid var(--bdr);background:var(--sur);color:var(--muted);cursor:pointer;transition:all .12s;user-select:none}
+.chip:hover{border-color:#aaa}
+.chip.on{background:var(--blue);color:#fff;border-color:var(--blue)}
+.chip.on-red{background:var(--red);color:#fff;border-color:var(--red)}
+.chip.on-amber{background:var(--amber);color:#fff;border-color:var(--amber)}
+.chip.on-orange{background:var(--orange);color:#fff;border-color:var(--orange)}
+.chip.on-green{background:var(--green);color:#fff;border-color:var(--green)}
+.chip.on-gray{background:#888780;color:#fff;border-color:#888780}
+
+/* テーブル */
+.tbl{width:100%;border-collapse:collapse;font-size:12px}
+.tbl th{text-align:left;padding:7px 8px;background:#f8f9fa;border-bottom:2px solid var(--bdr);color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;white-space:nowrap}
+.tbl td{padding:7px 8px;border-bottom:0.5px solid #f0f0f0;vertical-align:middle}
+.tbl tr:hover td{background:#fafafa}
+.missing{color:var(--red);font-weight:700}
+
+/* バーチャート */
+.bar-row{display:grid;grid-template-columns:80px 1fr 36px;align-items:center;gap:8px;margin-bottom:7px;font-size:12px;color:var(--txt)}
+.bar-bg{background:#e9ecef;border-radius:5px;height:11px;overflow:hidden}
+.bar-fill{height:100%;border-radius:5px;transition:width .7s}
+
+/* フッター */
+.page-footer{text-align:center;padding:14px;font-size:11px;color:var(--muted);border-top:0.5px solid var(--bdr);margin-top:8px}
+
+@keyframes spin{to{transform:rotate(360deg)}}
+.spin{animation:spin .8s linear infinite;display:inline-block}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">📊</div>
+    <div class="logo-text">
+      <h1>プロジェクト統合ダッシュボード</h1>
+      <div class="pj">BNE社運用統合プロジェクト</div>
+    </div>
+  </div>
+  <div class="hdr-r">
+    <span class="last-upd" id="last-upd"></span>
+    <button class="btn" id="btn-wbs" onclick="document.getElementById('fi-wbs').click()" style="display:none">📋 WBS更新</button>
+    <button class="btn" id="btn-iq"  onclick="document.getElementById('fi-iq').click()"  style="display:none">💬 問い合わせ更新</button>
+    <button class="btn" id="btn-is"  onclick="document.getElementById('fi-is').click()"  style="display:none">🚨 課題更新</button>
+    <button class="btn btn-p" id="btn-reload" onclick="reloadAll()" style="display:none"><span id="ri">🔄</span><span id="rl">再読み込み</span></button>
+  </div>
+</header>
+
+<input type="file" id="fi-wbs"  accept=".xlsx,.xls" onchange="handleFile('wbs',this.files[0])">
+<input type="file" id="fi-iq"   accept=".xlsx,.xls" onchange="handleFile('iq',this.files[0])">
+<input type="file" id="fi-is"   accept=".xlsx,.xls" onchange="handleFile('is',this.files[0])">
+
+<div id="log-bar"><span id="log-msg"></span></div>
+
+<!-- セットアップ -->
+<div id="setup">
+  <div class="setup-ttl">📂 ファイルを読み込んでください</div>
+  <div class="setup-sub">3つのExcelをドロップ、または選択してください。1つからでも確認できます。</div>
+  <div class="dg">
+    <div class="dc" id="dz-wbs" onclick="document.getElementById('fi-wbs').click()" ondragover="dv(event,'dz-wbs','add')" ondragleave="dv(event,'dz-wbs','rm')" ondrop="onDrop(event,'wbs')">
+      <div class="dc-icon">📋</div><div class="dc-name">WBS・計画</div>
+      <div class="dc-sub">BNE社運用統合_WBS_20260302.xlsx<br>シート：1.最終判断（4.17）まで</div>
+      <button class="btn btn-p" onclick="event.stopPropagation();document.getElementById('fi-wbs').click()">選択</button>
+      <div class="dc-file" id="wbs-fn"></div>
+    </div>
+    <div class="dc" id="dz-iq" onclick="document.getElementById('fi-iq').click()" ondragover="dv(event,'dz-iq','add')" ondragleave="dv(event,'dz-iq','rm')" ondrop="onDrop(event,'iq')">
+      <div class="dc-icon">💬</div><div class="dc-name">問い合わせ履歴</div>
+      <div class="dc-sub">運用標準化問い合わせ履歴.xlsx<br>シート：MAIN</div>
+      <button class="btn btn-p" onclick="event.stopPropagation();document.getElementById('fi-iq').click()">選択</button>
+      <div class="dc-file" id="iq-fn"></div>
+    </div>
+    <div class="dc" id="dz-is" onclick="document.getElementById('fi-is').click()" ondragover="dv(event,'dz-is','add')" ondragleave="dv(event,'dz-is','rm')" ondrop="onDrop(event,'is')">
+      <div class="dc-icon">🚨</div><div class="dc-name">課題</div>
+      <div class="dc-sub">課題.xlsx<br>シート：Sheet1</div>
+      <button class="btn btn-p" onclick="event.stopPropagation();document.getElementById('fi-is').click()">選択</button>
+      <div class="dc-file" id="is-fn"></div>
+    </div>
+  </div>
+</div>
+
+<!-- メインダッシュボード -->
+<main id="main">
+  <div class="tab-bar">
+    <button class="tab active" onclick="sw('overall',this)">🏠 プロジェクト全体</button>
+    <button class="tab" id="tab-wbs-btn" onclick="sw('wbs',this)">📋 WBS進捗</button>
+    <button class="tab" id="tab-iq-btn"  onclick="sw('iq',this)">💬 問い合わせ</button>
+    <button class="tab" id="tab-is-btn"  onclick="sw('is',this)">🚨 課題</button>
+  </div>
+
+  <!-- ===== 全体タブ ===== -->
+  <div id="tab-overall" class="tab-panel active">
+    <div id="health-banner"></div>
+    <div class="g3" id="ov-3col"></div>
+    <div class="card"><div class="ct">⚠️ プロジェクト全体の懸念事項</div><div id="ov-concerns"></div></div>
+    <div class="g2">
+      <div class="sc"><div class="sc-hd"><div class="sc-ttl">📋 WBSフェーズ別進捗</div></div><div class="sc-body" id="ov-wbs-phase"></div></div>
+      <div class="sc"><div class="sc-hd"><div class="sc-ttl">💬 問い合わせ ／ 🚨 課題</div></div><div class="sc-body" id="ov-iq-is"></div></div>
+    </div>
+  </div>
+
+  <!-- ===== WBSタブ ===== -->
+  <div id="tab-wbs" class="tab-panel">
+    <div class="split">
+      <div class="left-col">
+        <div class="card card-no-mb">
+          <div class="ct">📈 フェーズ別進捗</div>
+          <div id="wbs-phases"></div>
+          <div style="font-size:10px;color:var(--muted);margin-top:6px">縦線＝計画進捗率</div>
+        </div>
+        <div class="card card-no-mb">
+          <div class="ct">👤 担当者別</div>
+          <div id="wbs-assignees"></div>
+        </div>
+        <div class="card card-no-mb">
+          <div class="ct">⚠️ 懸念サマリー</div>
+          <div id="wbs-concern-summary"></div>
+        </div>
+      </div>
+      <div class="right-col">
+        <div class="card card-no-mb">
+          <div class="ct">全タスク一覧</div>
+          <div class="chips" id="wbs-chips"></div>
+          <div class="fb">
+            <label>フェーズ</label><select id="wf-phase" onchange="filterWBS()"><option value="">すべて</option></select>
+            <label>担当者</label><select id="wf-assignee" onchange="filterWBS()"><option value="">すべて</option></select>
+            <button class="btn-reset" onclick="resetWBS()">リセット</button>
+            <span class="f-count" id="wf-count"></span>
+          </div>
+          <div style="overflow-x:auto">
+            <table class="tbl"><thead><tr><th>ステータス</th><th>フェーズ</th><th>タスク名</th><th>担当</th><th>実績%</th><th>計画%</th><th>終了予定</th></tr></thead>
+            <tbody id="wbs-body"></tbody></table>
+            <div id="wbs-empty" style="display:none;text-align:center;padding:24px;color:var(--muted);font-size:13px">該当タスクがありません</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 問い合わせタブ ===== -->
+  <div id="tab-iq" class="tab-panel">
+    <div class="split">
+      <div class="left-col">
+        <div class="card card-no-mb">
+          <div class="ct">📊 ステータス別</div>
+          <div id="iq-status-bars"></div>
+        </div>
+        <div class="card card-no-mb">
+          <div class="ct">👤 担当者別</div>
+          <div id="iq-assignee-bars"></div>
+        </div>
+        <div class="card card-no-mb">
+          <div class="ct">⚠️ 懸念事項</div>
+          <div id="iq-concerns"></div>
+        </div>
+      </div>
+      <div class="right-col">
+        <div class="card card-no-mb">
+          <div class="ct">全件一覧</div>
+          <div class="fb">
+            <label>ステータス</label><select id="iq-f-st" onchange="filterIQ()"><option value="">すべて</option></select>
+            <label>担当者</label><select id="iq-f-as" onchange="filterIQ()"><option value="">すべて</option></select>
+            <label>分類</label><select id="iq-f-ca" onchange="filterIQ()"><option value="">すべて</option></select>
+            <label>投稿種別</label><select id="iq-f-ty" onchange="filterIQ()"><option value="">すべて</option></select>
+            <button class="btn-reset" onclick="resetIQ()">リセット</button>
+            <span class="f-count" id="iq-count"></span>
+          </div>
+          <div style="overflow-x:auto">
+            <table class="tbl"><thead><tr><th>投稿日</th><th>投稿者</th><th>種別</th><th>ステータス</th><th>分類</th><th>担当</th><th>経過日</th><th>内容（抜粋）</th></tr></thead>
+            <tbody id="iq-body"></tbody></table>
+            <div id="iq-empty" style="display:none;text-align:center;padding:24px;color:var(--muted);font-size:13px">該当なし</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 課題タブ ===== -->
+  <div id="tab-is" class="tab-panel">
+    <div class="split">
+      <div class="left-col">
+        <div class="card card-no-mb">
+          <div class="ct">📊 クローズ率</div>
+          <div id="is-close-bar"></div>
+        </div>
+        <div class="card card-no-mb">
+          <div class="ct">🔥 優先度別（オープン）</div>
+          <div id="is-prio-bars"></div>
+        </div>
+        <div class="card card-no-mb">
+          <div class="ct">⚠️ 懸念事項</div>
+          <div id="is-concerns"></div>
+        </div>
+      </div>
+      <div class="right-col">
+        <div class="card card-no-mb">
+          <div class="ct">全件一覧</div>
+          <div class="chips" id="is-chips"></div>
+          <div class="fb">
+            <label>優先度</label><select id="is-f-pr" onchange="filterIS()"><option value="">すべて</option></select>
+            <label>カテゴリー</label><select id="is-f-ca" onchange="filterIS()"><option value="">すべて</option></select>
+            <button class="btn-reset" onclick="resetIS()">リセット</button>
+            <span class="f-count" id="is-count"></span>
+          </div>
+          <div style="overflow-x:auto">
+            <table class="tbl"><thead><tr><th>ステータス</th><th>優先度</th><th>起票日</th><th>期日</th><th>カテゴリー</th><th>課題（抜粋）</th><th>対応状況</th></tr></thead>
+            <tbody id="is-body"></tbody></table>
+            <div id="is-empty" style="display:none;text-align:center;padding:24px;color:var(--muted);font-size:13px">該当なし</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<div class="page-footer" id="page-footer" style="display:none">ブラウザ上でローカル処理 — データは外部送信されません</div>
+
+<script>
+// ============================================================
+// グローバル
+// ============================================================
+let FILES={wbs:null,iq:null,is:null};
+let DATA={wbs:null,iq:null,is:null};
+
+// WBSチップ状態
+const WBS_CHIP_DEFS=[
+  {key:'done',   label:'✅ 完了',   cls:'on-green'},
+  {key:'inprogress',label:'🔵 進行中',cls:'on'},
+  {key:'warning',label:'🟡 要注意',cls:'on-amber'},
+  {key:'delayed',label:'🔴 遅延',  cls:'on-red'},
+  {key:'overdue',label:'🔴 期限超過',cls:'on-red'},
+  {key:'suspect',label:'⚠️ 要確認',cls:'on-orange'},
+  {key:'notstarted',label:'⬜ 未着手',cls:'on-gray'},
+];
+let wbsActiveChips=new Set(['done','inprogress','warning','delayed','overdue','suspect','notstarted']);
+
+// IS（課題）チップ状態
+const IS_CHIP_DEFS=[
+  {key:'open',  label:'🔴 オープン', cls:'on-red'},
+  {key:'closed',label:'✅ クローズ済',cls:'on-green'},
+];
+let isActiveChips=new Set(['open','closed']);
+
+// ============================================================
+// ファイル操作
+// ============================================================
+function dv(e,id,op){e.preventDefault();document.getElementById(id).classList[op==='add'?'add':'remove']('drag-over')}
+function onDrop(e,type){e.preventDefault();dv(e,'dz-'+type,'rm');const f=e.dataTransfer.files[0];if(f)handleFile(type,f)}
+function handleFile(type,f){
+  if(!f)return;
+  FILES[type]=f;
+  document.getElementById(type==='is'?'is-fn':type+'-fn').textContent='✅ '+f.name;
+  document.getElementById('dz-'+type).classList.add('loaded');
+  tryRender();
+}
+function tryRender(){
+  if(!FILES.wbs&&!FILES.iq&&!FILES.is)return;
+  setLog('解析中...','running');
+  const tasks=[];
+  if(FILES.wbs)tasks.push(parseWBS(FILES.wbs));
+  if(FILES.iq) tasks.push(parseIQ(FILES.iq));
+  if(FILES.is) tasks.push(parseIS(FILES.is));
+  Promise.all(tasks).then(()=>{
+    renderAll();
+    setLog('✅ 読み込み完了','success');
+    document.getElementById('setup').style.display='none';
+    document.getElementById('main').style.display='block';
+    document.getElementById('page-footer').style.display='block';
+    ['btn-wbs','btn-iq','btn-is','btn-reload'].forEach(id=>document.getElementById(id).style.display='flex');
+    document.getElementById('last-upd').textContent='更新: '+fmtNow();
+  }).catch(err=>setLog('❌ '+err.message,'error'));
+}
+function reloadAll(){
+  setBusy(true);setLog('再読み込み中...','running');
+  const tasks=[];
+  if(FILES.wbs)tasks.push(parseWBS(FILES.wbs));
+  if(FILES.iq) tasks.push(parseIQ(FILES.iq));
+  if(FILES.is) tasks.push(parseIS(FILES.is));
+  Promise.all(tasks).then(()=>{renderAll();setLog('✅ 更新完了','success');setBusy(false);document.getElementById('last-upd').textContent='更新: '+fmtNow()}).catch(err=>{setLog('❌ '+err.message,'error');setBusy(false)});
+}
+function setBusy(b){document.getElementById('btn-reload').disabled=b;document.getElementById('ri').className=b?'spin':'';document.getElementById('rl').textContent=b?'読み込み中...':'再読み込み'}
+
+// ============================================================
+// WBS 解析
+// ============================================================
+const WBS_CFG={SHEET:'1.最終判断（4.17）まで',ROW0:6,C:{LV1:0,LV2:1,LV3:2,LV4:3,TASK:4,ASS:6,PH:7,AH:8,PROG:9,SP:10,SA:11,EP:12,EA:13}};
+
+function parseWBS(file){
+  return new Promise((res,rej)=>{
+    const r=new FileReader();
+    r.onload=e=>{
+      try{
+        const wb=XLSX.read(e.target.result,{type:'array',cellDates:true});
+        const ws=wb.Sheets[WBS_CFG.SHEET];
+        if(!ws)throw new Error('WBSシートが見つかりません');
+        const rF=XLSX.utils.sheet_to_json(ws,{header:1,defval:null,raw:false});
+        const rR=XLSX.utils.sheet_to_json(ws,{header:1,defval:null,raw:true});
+        DATA.wbs=analyzeWBS(extractWBSTasks(rF,rR));res();
+      }catch(err){rej(err)}
+    };r.readAsArrayBuffer(file);
+  });
+}
+
+function extractWBSTasks(rF,rR){
+  const tasks=[],C=WBS_CFG.C,today=new Date();today.setHours(0,0,0,0);
+  let lv1='',lv2='';
+  for(let i=WBS_CFG.ROW0;i<rF.length;i++){
+    const fs=rF[i],rr=rR[i];
+    const v1=s(fs[C.LV1]),v2=s(fs[C.LV2]);
+    if(v1)lv1=v1;if(v2)lv2=v2;
+    const task=s(fs[C.TASK]);if(!task)continue;
+    const rawStr=s(fs[C.PROG]),rawNum=rr[C.PROG];
+    let prog=null;
+    if(rawStr!==''){
+      if(rawStr.includes('%'))prog=parseFloat(rawStr)/100;
+      else if(rawNum!=null){prog=parseFloat(rawNum);if(!isNaN(prog)&&prog>1)prog/=100;}
+      if(prog!=null&&isNaN(prog))prog=null;
+      if(prog!=null)prog=Math.min(Math.max(prog,0),1);
+    }
+    const startP=parseDate(fs[C.SP]),endP=parseDate(fs[C.EP]);
+    const plannedH=parseFloat(rr[C.PH])||0;
+    if(!startP&&!endP&&plannedH===0&&prog===null)continue;
+    const planProg=calcPlan(startP,endP,today);
+    const status=wbsStatus(prog,endP,today);
+    const delayDays=calcDelay(prog??0,planProg,startP,endP);
+    const suspects=detectSuspect(prog,startP,endP,plannedH,today);
+    tasks.push({lv1,lv2,task,assignee:s(fs[C.ASS]),prog,planProg,plannedH,status,delayDays,startP,endP,suspects,isSuspect:suspects.length>0});
+  }
+  return tasks;
+}
+
+function wbsStatus(prog,endP,today){
+  if(prog==null)return 'notstarted';if(prog>=1)return 'done';
+  if(!endP)return prog>0?'inprogress':'notstarted';
+  if(endP<today)return prog===0?'overdue':'delayed';
+  if(Math.ceil((endP-today)/86400000)<=3&&prog<0.8)return 'warning';
+  return prog>0?'inprogress':'notstarted';
+}
+function calcPlan(s,e,t){if(!s||!e)return 0;if(t<=s)return 0;if(t>=e)return 1;return(t-s)/(e-s)}
+function calcDelay(prog,plan,startP,endP){if(!endP||!startP||prog>=1)return 0;const g=plan-prog;if(g<=0)return 0;return Math.round(g*Math.ceil((endP-startP)/86400000))}
+function detectSuspect(prog,startP,endP,plannedH,today){
+  const issues=[],h=prog!=null,pv=prog??0;
+  if(h&&pv>=1&&(!startP||!endP))issues.push({label:'完了・日付なし',cls:'b-orange'});
+  if(!h&&(startP||endP))issues.push({label:'日付あり・進捗なし',cls:'b-amber'});
+  if(!h&&!startP&&!endP&&plannedH>0)issues.push({label:'日付・進捗なし',cls:'b-gray'});
+  if(startP&&endP&&startP>endP)issues.push({label:'開始>終了日',cls:'b-blue'});
+  if(endP&&endP<today&&h&&pv<1)issues.push({label:'期限超過・未完了',cls:'b-red'});
+  return issues;
+}
+
+function analyzeWBS(tasks){
+  const done=tasks.filter(t=>t.status==='done').length;
+  const delayed=tasks.filter(t=>t.status==='delayed'||t.status==='overdue').length;
+  const warning=tasks.filter(t=>t.status==='warning').length;
+  const inprog=tasks.filter(t=>t.status==='inprogress').length;
+  const suspects=tasks.filter(t=>t.isSuspect);
+  const valid=tasks.filter(t=>t.endP&&t.prog!=null);
+  const avgProg=valid.length?valid.reduce((a,t)=>a+t.prog,0)/valid.length:0;
+  const avgPlan=valid.length?valid.reduce((a,t)=>a+t.planProg,0)/valid.length:0;
+  const pm={};
+  tasks.forEach(t=>{const k=t.lv2||t.lv1||'その他';if(!pm[k])pm[k]={n:0,ps:0,pls:0,d:0};pm[k].n++;pm[k].ps+=(t.prog??0);pm[k].pls+=t.planProg;if(t.status==='delayed'||t.status==='overdue')pm[k].d++});
+  const phases=Object.entries(pm).filter(([,v])=>v.n>=2).map(([name,v])=>({name,prog:v.ps/v.n,plan:v.pls/v.n,n:v.n,d:v.d}));
+  const am={};
+  tasks.forEach(t=>{if(!t.assignee)return;if(!am[t.assignee])am[t.assignee]={n:0,done:0,del:0,ps:0};am[t.assignee].n++;am[t.assignee].ps+=(t.prog??0);if(t.status==='done')am[t.assignee].done++;if(t.status==='delayed'||t.status==='overdue')am[t.assignee].del++});
+  const assignees=Object.entries(am).map(([name,v])=>({name,...v,avg:v.n?v.ps/v.n:0})).sort((a,b)=>b.del-a.del).slice(0,8);
+  return{total:tasks.length,done,delayed,warning,inprog,suspects,avgProg,avgPlan,phases,assignees,tasks};
+}
+
+// ============================================================
+// 問い合わせ 解析
+// ============================================================
+function parseIQ(file){
+  return new Promise((res,rej)=>{
+    const r=new FileReader();
+    r.onload=e=>{
+      try{
+        const wb=XLSX.read(e.target.result,{type:'array',cellDates:true});
+        const ws=wb.Sheets['MAIN'];if(!ws)throw new Error('MAINシートが見つかりません');
+        const rows=XLSX.utils.sheet_to_json(ws,{defval:null,raw:false});
+        DATA.iq=analyzeIQ(rows);res();
+      }catch(err){rej(err)}
+    };r.readAsArrayBuffer(file);
+  });
+}
+
+function analyzeIQ(rows){
+  const today=new Date();today.setHours(0,0,0,0);
+  const items=rows.map(r=>({
+    date:parseDate(s(r['投稿日時'])),poster:s(r['投稿者']),type:s(r['投稿種別']),
+    content:s(r['問い合わせ内容']),status:s(r['ステータス']),category:s(r['分類']),
+    assignee:s(r['担当者']),answer:s(r['回答内容']),
+  })).filter(r=>r.content||r.status);
+  items.forEach(r=>{r.elapsed=r.date?Math.floor((today-r.date)/86400000):null;r.resolved=r.status==='完了'||r.status==='回答済'});
+  const total=items.length,resolved=items.filter(r=>r.resolved).length;
+  const ichiji=items.filter(r=>r.status==='一次回答済').length;
+  const noAssignee=items.filter(r=>!r.assignee).length;
+  const maxElapsed=items.filter(r=>!r.resolved).reduce((m,r)=>r.elapsed!=null&&r.elapsed>m?r.elapsed:m,0);
+  const statusCounts={},assigneeCounts={},catCounts={},typeCounts={};
+  items.forEach(r=>{
+    const st=r.status||'未設定';statusCounts[st]=(statusCounts[st]||0)+1;
+    const as=r.assignee||'未割当';assigneeCounts[as]=(assigneeCounts[as]||0)+1;
+    if(r.category)catCounts[r.category]=(catCounts[r.category]||0)+1;
+    if(r.type)typeCounts[r.type]=(typeCounts[r.type]||0)+1;
+  });
+  const concerns=[];
+  if(noAssignee>0)concerns.push({icon:'⚠️',title:`担当者未割当が${noAssignee}件`,sub:'放置リスクがあります。早急に割り当ててください。',sev:'high'});
+  if(maxElapsed>=14)concerns.push({icon:'🕐',title:`一次回答済のまま${maxElapsed}日以上経過した問い合わせあり`,sub:'最終回答・完了処理が滞っています。',sev:'mid'});
+  return{total,resolved,ichiji,noAssignee,maxElapsed,statusCounts,assigneeCounts,catCounts,typeCounts,concerns,items};
+}
+
+// ============================================================
+// 課題 解析
+// ============================================================
+function parseIS(file){
+  return new Promise((res,rej)=>{
+    const r=new FileReader();
+    r.onload=e=>{
+      try{
+        const wb=XLSX.read(e.target.result,{type:'array',cellDates:true});
+        const ws=wb.Sheets['Sheet1'];if(!ws)throw new Error('Sheet1が見つかりません');
+        const rows=XLSX.utils.sheet_to_json(ws,{defval:null,raw:false});
+        DATA.is=analyzeIS(rows);res();
+      }catch(err){rej(err)}
+    };r.readAsArrayBuffer(file);
+  });
+}
+
+function parseDateJP(str){
+  if(!str)return null;
+  const m=String(str).match(/(\d+)月(\d+)日/);
+  if(!m)return null;
+  const now=new Date();
+  return new Date(now.getFullYear(),+m[1]-1,+m[2]);
+}
+
+function analyzeIS(rows){
+  const today=new Date();today.setHours(0,0,0,0);
+  const items=rows.map(r=>({
+    status:s(r['ステータス']),
+    priority:s(r['優先度']),
+    startDate:parseDateJP(s(r['起票日'])),
+    dueDate:parseDateJP(s(r['期日'])),
+    summary:s(r['課題（サマリー）']).replace(/^\n/,'').replace(/\n/g,' ').trim(),
+    progress:s(r['対応状況']).replace(/^\n/,'').replace(/\n/g,' ').trim(),
+    category:s(r['カテゴリー']),
+    classify:s(r['分類']),
+  })).filter(r=>r.summary||r.status);
+  const closed=['クローズ','完了'];
+  items.forEach(r=>{
+    r.isOpen=!closed.includes(r.status);
+    r.isOverdue=r.dueDate&&r.dueDate<today&&r.isOpen;
+    r.elapsed=r.startDate?Math.floor((today-r.startDate)/86400000):null;
+  });
+  const total=items.length,open=items.filter(r=>r.isOpen).length,closedN=total-open;
+  const critical=items.filter(r=>r.isOpen&&r.priority==='クリティカル').length;
+  const high=items.filter(r=>r.isOpen&&r.priority==='高').length;
+  const overdue=items.filter(r=>r.isOverdue).length;
+  const priCounts={},catCounts={},stCounts={};
+  items.filter(r=>r.isOpen).forEach(r=>{
+    if(r.priority)priCounts[r.priority]=(priCounts[r.priority]||0)+1;
+    if(r.category)catCounts[r.category]=(catCounts[r.category]||0)+1;
+  });
+  items.forEach(r=>{const st=r.status||'未設定';stCounts[st]=(stCounts[st]||0)+1});
+  const concerns=[];
+  if(critical>0)concerns.push({icon:'🚨',title:`クリティカル課題が${critical}件オープンです`,sub:'最優先で解決が必要な課題があります。',sev:'high'});
+  if(overdue>0)concerns.push({icon:'🔴',title:`期日を超過しているオープン課題が${overdue}件あります`,sub:'計画より遅れています。対応を急いでください。',sev:'high'});
+  if(high>0)concerns.push({icon:'🟠',title:`優先度「高」のオープン課題が${high}件あります`,sub:'早急な対応が必要です。',sev:'mid'});
+  return{total,open,closedN,critical,high,overdue,priCounts,catCounts,stCounts,concerns,items};
+}
+
+// ============================================================
+// 健康度判定
+// ============================================================
+function calcHealth(){
+  let score=100;
+  if(DATA.wbs){const d=DATA.wbs;if(d.delayed>0)score-=d.delayed*5;if(d.avgProg<d.avgPlan-0.1)score-=15;if(d.suspects.length>0)score-=5}
+  if(DATA.iq){const d=DATA.iq;const rate=d.total>0?d.resolved/d.total:1;if(rate<0.5)score-=20;else if(rate<0.7)score-=10;if(d.noAssignee>0)score-=10;if(d.maxElapsed>=21)score-=10;else if(d.maxElapsed>=14)score-=5}
+  if(DATA.is){const d=DATA.is;if(d.critical>0)score-=d.critical*8;if(d.overdue>0)score-=d.overdue*5;if(d.high>0)score-=Math.min(d.high*3,15)}
+  if(score>=80)return{cls:'hb-green',icon:'🟢',label:'前倒し・計画通り',desc:'プロジェクトは順調に進行しています。'};
+  if(score>=60)return{cls:'hb-amber',icon:'🟡',label:'ほぼ計画通り',desc:'概ね順調ですが、一部要注意項目があります。'};
+  if(score>=40)return{cls:'hb-red',icon:'🟠',label:'懸念あり',desc:'複数の懸念事項があります。早急な確認を推奨します。'};
+  return{cls:'hb-red',icon:'🔴',label:'要対応',desc:'重大な問題が発生しています。即座の対応が必要です。'};
+}
+
+// ============================================================
+// 描画
+// ============================================================
+function renderAll(){
+  renderOverall();
+  if(DATA.wbs){renderWBS();document.getElementById('tab-wbs-btn').style.display=''}
+  else document.getElementById('tab-wbs-btn').style.display='none';
+  if(DATA.iq){renderIQ();document.getElementById('tab-iq-btn').style.display=''}
+  else document.getElementById('tab-iq-btn').style.display='none';
+  if(DATA.is){renderIS();document.getElementById('tab-is-btn').style.display=''}
+  else document.getElementById('tab-is-btn').style.display='none';
+}
+
+function renderOverall(){
+  // 健康度バナー
+  const h=calcHealth();
+  document.getElementById('health-banner').innerHTML=`<div class="hbanner ${h.cls}"><div class="hb-icon">${h.icon}</div><div><div class="hb-label">${h.label}</div><div class="hb-desc">${h.desc}</div></div><div class="hb-crit"><div style="margin-bottom:3px;font-weight:600">判定基準</div><div>🟢 前倒し・計画通り</div><div>🟡 ほぼ計画通り</div><div>🟠 懸念あり　🔴 要対応</div></div></div>`;
+
+  // 3カラム
+  let col='';
+  if(DATA.wbs){
+    const d=DATA.wbs,gap=d.avgProg-d.avgPlan;
+    col+=`<div class="sc"><div class="sc-hd"><div class="sc-ttl">📋 WBS進捗</div><span class="badge ${gap>=0?'b-green':'b-amber'}">計画比 ${gap>=0?'+':''}${pct(gap)}</span></div><div class="sc-body">
+      <div class="pb-row"><div class="pb-label"><span>全体進捗</span><span class="${gap>=0?'ok':'warn'}" style="font-weight:600">${pct(d.avgProg)}</span></div><div class="pb-bg"><div class="pb-fill" style="width:${r(d.avgProg)}%;background:${d.delayed>0?'#b02020':'#1e7e34'}"></div><div class="pb-plan" style="left:${r(d.avgPlan)}%"></div></div><div class="pb-hint"><span>実績 ${pct(d.avgProg)}</span><span>計画 ${pct(d.avgPlan)}</span></div></div>
+      <div class="sr"><span class="sr-l">完了タスク</span><span class="sr-v ok">${d.done} / ${d.total}件</span></div>
+      <div class="sr"><span class="sr-l">遅延タスク</span><span class="sr-v ${d.delayed>0?'bad':'ok'}">${d.delayed}件</span></div>
+      <div class="sr"><span class="sr-l">要確認</span><span class="sr-v ${d.suspects.length>0?'warn':'ok'}">${d.suspects.length}件</span></div>
+    </div></div>`;
+  }
+  if(DATA.iq){
+    const d=DATA.iq,rate=d.total>0?d.resolved/d.total:0;
+    col+=`<div class="sc"><div class="sc-hd"><div class="sc-ttl">💬 問い合わせ</div><span class="badge ${d.noAssignee>0?'b-red':'b-amber'}">未解決 ${d.total-d.resolved}件</span></div><div class="sc-body">
+      <div class="pb-row"><div class="pb-label"><span>解決率</span><span class="${rate>=0.7?'ok':'warn'}" style="font-weight:600">${pct(rate)}</span></div><div class="pb-bg"><div class="pb-fill" style="width:${r(rate)}%;background:${rate>=0.7?'#1e7e34':rate>=0.5?'#a05c00':'#b02020'}"></div></div><div class="pb-hint"><span>${d.resolved} / ${d.total}件</span></div></div>
+      <div class="sr"><span class="sr-l">一次回答済（未完結）</span><span class="sr-v warn">${d.ichiji}件</span></div>
+      <div class="sr"><span class="sr-l">担当者未割当</span><span class="sr-v ${d.noAssignee>0?'bad':'ok'}">${d.noAssignee}件</span></div>
+      <div class="sr"><span class="sr-l">最長未解決</span><span class="sr-v ${d.maxElapsed>=14?'bad':'ok'}">${d.maxElapsed}日</span></div>
+    </div></div>`;
+  }
+  if(DATA.is){
+    const d=DATA.is,rate=d.total>0?d.closedN/d.total:0;
+    col+=`<div class="sc"><div class="sc-hd"><div class="sc-ttl">🚨 課題</div><span class="badge ${d.critical>0?'b-red':'b-amber'}">オープン ${d.open}件</span></div><div class="sc-body">
+      <div class="pb-row"><div class="pb-label"><span>クローズ率</span><span class="${rate>=0.8?'ok':'warn'}" style="font-weight:600">${pct(rate)}</span></div><div class="pb-bg"><div class="pb-fill" style="width:${r(rate)}%;background:${rate>=0.8?'#1e7e34':'#a05c00'}"></div></div><div class="pb-hint"><span>${d.closedN} / ${d.total}件</span></div></div>
+      <div class="sr"><span class="sr-l">クリティカル</span><span class="sr-v ${d.critical>0?'bad':'ok'}">${d.critical}件</span></div>
+      <div class="sr"><span class="sr-l">優先度「高」（オープン）</span><span class="sr-v ${d.high>0?'warn':'ok'}">${d.high}件</span></div>
+      <div class="sr"><span class="sr-l">期日超過</span><span class="sr-v ${d.overdue>0?'bad':'ok'}">${d.overdue}件</span></div>
+    </div></div>`;
+  }
+  document.getElementById('ov-3col').innerHTML=col;
+
+  // 統合懸念
+  let cHtml='';
+  const srcTag=(label,bg,col)=>`<span class="src-tag" style="background:${bg};color:${col}">${label}</span>`;
+  if(DATA.iq)DATA.iq.concerns.forEach(c=>{cHtml+=concernRow(c.icon,c.title,c.sub,c.sev,srcTag('💬 問い合わせ','#FAEEDA','#633806'))});
+  if(DATA.is)DATA.is.concerns.forEach(c=>{cHtml+=concernRow(c.icon,c.title,c.sub,c.sev,srcTag('🚨 課題','#FCEBEB','#791F1F'))});
+  if(DATA.wbs&&DATA.wbs.suspects.length>0)cHtml+=concernRow('⚠️',`WBSに要確認タスクが${DATA.wbs.suspects.length}件あります`,'日付・進捗のデータ不備があります。','mid',srcTag('📋 WBS','#E6F1FB','#0C447C'));
+  if(!cHtml)cHtml='<div style="text-align:center;padding:16px;color:#1e7e34;font-size:13px">✅ 現時点で懸念事項はありません</div>';
+  document.getElementById('ov-concerns').innerHTML=cHtml;
+
+  // フェーズバー
+  if(DATA.wbs){
+    document.getElementById('ov-wbs-phase').innerHTML=DATA.wbs.phases.slice(0,6).map(p=>{
+      const aW=r(p.prog),pW=r(p.plan);
+      const col=p.prog>=p.plan?'#1e7e34':p.plan-p.prog>0.2?'#b02020':'#a05c00';
+      return`<div style="display:grid;grid-template-columns:110px 1fr 40px;align-items:center;gap:8px;margin-bottom:7px"><div style="font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--txt)" title="${p.name}">${p.name}</div><div style="position:relative;height:11px"><div style="background:#e9ecef;border-radius:5px;height:100%;overflow:hidden"><div style="width:${aW}%;height:100%;background:${col};border-radius:5px"></div></div><div style="position:absolute;top:0;height:100%;width:2px;background:rgba(0,0,0,.35);left:${pW}%"></div></div><div style="font-size:11px;font-weight:700;text-align:right;color:${col}">${pct(p.prog)}</div></div>`;
+    }).join('')||'<div style="color:var(--muted);font-size:12px">データなし</div>';
+  }else document.getElementById('ov-wbs-phase').innerHTML='<div style="color:var(--muted);font-size:12px">WBSファイル未読み込み</div>';
+
+  // 問い合わせ・課題サマリー
+  let iqIsHtml='';
+  if(DATA.iq){
+    const sc=DATA.iq.statusCounts,maxV=Math.max(...Object.values(sc),1);
+    const cm={'完了':'#1e7e34','回答済':'#639922','一次回答済':'#a05c00','未設定':'#b02020'};
+    iqIsHtml+=Object.entries(sc).map(([k,v])=>`<div class="bar-row"><div>${k}</div><div class="bar-bg"><div class="bar-fill" style="width:${Math.round(v/maxV*100)}%;background:${cm[k]||'#adb5bd'}"></div></div><div class="bar-pct">${v}</div></div>`).join('');
+  }
+  if(DATA.is){
+    if(iqIsHtml)iqIsHtml+='<div style="height:10px;border-top:0.5px solid var(--bdr);margin:8px 0"></div>';
+    const pc=DATA.is.priCounts,maxP=Math.max(...Object.values(pc),1);
+    const pm={'クリティカル':'#b02020','高':'#b02020','中':'#a05c00','低':'#888780'};
+    iqIsHtml+=Object.entries(pc).map(([k,v])=>`<div class="bar-row"><div style="color:${pm[k]||'#888'}">${k}</div><div class="bar-bg"><div class="bar-fill" style="width:${Math.round(v/maxP*100)}%;background:${pm[k]||'#adb5bd'}"></div></div><div class="bar-pct">${v}</div></div>`).join('');
+  }
+  document.getElementById('ov-iq-is').innerHTML=iqIsHtml||'<div style="color:var(--muted);font-size:12px">データなし</div>';
+}
+
+function concernRow(icon,title,sub,sev,srcTagHtml){
+  const sevBadge=sev==='high'?'<span class="badge b-red" style="flex-shrink:0">高</span>':'<span class="badge b-amber" style="flex-shrink:0">中</span>';
+  return`<div class="concern-row"><span class="ci-icon">${icon}</span><div class="ci-b"><div class="ci-ttl">${title}</div><div class="ci-sub">${sub}</div></div>${sevBadge}${srcTagHtml||''}</div>`;
+}
+
+function renderWBS(){
+  const d=DATA.wbs;
+  // フェーズバー
+  document.getElementById('wbs-phases').innerHTML=d.phases.map(p=>{
+    const aW=r(p.prog),pW=r(p.plan);
+    const col=p.prog>=p.plan?'#1e7e34':p.plan-p.prog>0.2?'#b02020':'#a05c00';
+    return`<div style="display:grid;grid-template-columns:100px 1fr 38px;align-items:center;gap:7px;margin-bottom:7px"><div style="font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${p.name}">${p.name}</div><div style="position:relative;height:11px"><div style="background:#e9ecef;border-radius:5px;height:100%;overflow:hidden"><div style="width:${aW}%;height:100%;background:${col};border-radius:5px"></div></div><div style="position:absolute;top:0;height:100%;width:2px;background:rgba(0,0,0,.35);left:${pW}%"></div></div><div style="font-size:11px;font-weight:700;text-align:right;color:${col}">${pct(p.prog)}</div></div>`;
+  }).join('');
+  // 担当者
+  document.getElementById('wbs-assignees').innerHTML=d.assignees.map(a=>`<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:0.5px solid var(--bdr)"><div style="width:26px;height:26px;border-radius:50%;background:var(--blue-bg);color:var(--blue-dk);font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">${a.name.slice(0,2)}</div><div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600">${a.name}</div><div style="height:3px;background:#e9ecef;border-radius:2px;margin-top:3px;overflow:hidden"><div style="height:100%;background:var(--blue);width:${r(a.avg)}%"></div></div></div><div style="font-size:11px;color:var(--muted);white-space:nowrap">${a.done}/${a.n}完了${a.del>0?` <span style="color:var(--red)">遅延${a.del}</span>`:''}</div></div>`).join('');
+  // 懸念サマリー
+  document.getElementById('wbs-concern-summary').innerHTML=`<div class="sr"><span class="sr-l">遅延</span><span class="sr-v ${d.delayed>0?'bad':'ok'}">${d.delayed}件</span></div><div class="sr"><span class="sr-l">要注意（3日以内）</span><span class="sr-v ${d.warning>0?'warn':'ok'}">${d.warning}件</span></div><div class="sr"><span class="sr-l">要確認</span><span class="sr-v ${d.suspects.length>0?'warn':'ok'}">${d.suspects.length}件</span></div>`;
+  // チップ初期化
+  buildChips('wbs-chips',WBS_CHIP_DEFS,wbsActiveChips,'wbs');
+  // フィルター選択肢
+  setOpts('wf-phase',[...new Set(d.tasks.map(t=>t.lv2||t.lv1).filter(Boolean))].sort());
+  setOpts('wf-assignee',[...new Set(d.tasks.map(t=>t.assignee).filter(Boolean))].sort());
+  filterWBS();
+}
+
+function renderIQ(){
+  const d=DATA.iq;
+  const sc=d.statusCounts,maxSC=Math.max(...Object.values(sc),1);
+  const cm={'完了':'#1e7e34','回答済':'#639922','一次回答済':'#a05c00','未設定':'#b02020'};
+  document.getElementById('iq-status-bars').innerHTML=Object.entries(sc).map(([k,v])=>`<div class="bar-row"><div>${k}</div><div class="bar-bg"><div class="bar-fill" style="width:${Math.round(v/maxSC*100)}%;background:${cm[k]||'#888'}"></div></div><div class="bar-pct">${v}件</div></div>`).join('');
+  const ac=d.assigneeCounts,maxAC=Math.max(...Object.values(ac),1);
+  document.getElementById('iq-assignee-bars').innerHTML=Object.entries(ac).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([k,v])=>`<div class="bar-row"><div style="${k==='未割当'?'color:var(--red)':''}">${k}</div><div class="bar-bg"><div class="bar-fill" style="width:${Math.round(v/maxAC*100)}%;background:${k==='未割当'?'#b02020':'#185FA5'}"></div></div><div class="bar-pct ${k==='未割当'?'bad':'blue'}">${v}</div></div>`).join('');
+  let cHtml='';d.concerns.forEach(c=>{cHtml+=concernRow(c.icon,c.title,c.sub,c.sev,'')});
+  document.getElementById('iq-concerns').innerHTML=cHtml||'<div style="text-align:center;padding:14px;color:#1e7e34;font-size:12px">✅ 懸念なし</div>';
+  setOpts('iq-f-st',[...new Set(d.items.map(r=>r.status).filter(Boolean))].sort());
+  setOpts('iq-f-as',[...new Set(d.items.map(r=>r.assignee||'未割当').filter(Boolean))].sort());
+  setOpts('iq-f-ca',[...new Set(d.items.map(r=>r.category).filter(Boolean))].sort());
+  setOpts('iq-f-ty',[...new Set(d.items.map(r=>r.type).filter(Boolean))].sort());
+  filterIQ();
+}
+
+function renderIS(){
+  const d=DATA.is;
+  // クローズ率バー
+  const rate=d.total>0?d.closedN/d.total:0;
+  document.getElementById('is-close-bar').innerHTML=`<div class="pb-row"><div class="pb-label"><span>クローズ率</span><span class="${rate>=0.8?'ok':'warn'}" style="font-weight:600">${pct(rate)}</span></div><div class="pb-bg"><div class="pb-fill" style="width:${r(rate)}%;background:${rate>=0.8?'#1e7e34':'#a05c00'}"></div></div><div class="pb-hint"><span>${d.closedN} / ${d.total}件クローズ</span><span>${d.open}件オープン</span></div></div>`;
+  // 優先度バー
+  const pm={'クリティカル':'#b02020','高':'#b02020','中':'#a05c00','低':'#888780'};
+  const pc=d.priCounts,maxP=Math.max(...Object.values(pc),1);
+  document.getElementById('is-prio-bars').innerHTML=Object.entries(pc).sort((a,b)=>{const o=['クリティカル','高','中','低'];return o.indexOf(a[0])-o.indexOf(b[0])}).map(([k,v])=>`<div class="bar-row"><div style="color:${pm[k]||'#888'}">${k}</div><div class="bar-bg"><div class="bar-fill" style="width:${Math.round(v/maxP*100)}%;background:${pm[k]||'#adb5bd'}"></div></div><div class="bar-pct">${v}</div></div>`).join('')||'<div style="color:var(--muted);font-size:12px">オープン課題なし</div>';
+  // 懸念
+  let cHtml='';d.concerns.forEach(c=>{cHtml+=concernRow(c.icon,c.title,c.sub,c.sev,'')});
+  document.getElementById('is-concerns').innerHTML=cHtml||'<div style="text-align:center;padding:14px;color:#1e7e34;font-size:12px">✅ 懸念なし</div>';
+  // チップ
+  buildChips('is-chips',IS_CHIP_DEFS,isActiveChips,'is');
+  setOpts('is-f-pr',['クリティカル','高','中','低'].filter(k=>d.items.some(r=>r.priority===k)));
+  setOpts('is-f-ca',[...new Set(d.items.map(r=>r.category).filter(Boolean))].sort());
+  filterIS();
+}
+
+// ============================================================
+// チップ
+// ============================================================
+function buildChips(containerId,defs,activeSet,type){
+  const el=document.getElementById(containerId);
+  el.innerHTML=defs.map(d=>`<span class="chip ${activeSet.has(d.key)?d.cls:''}" onclick="toggleChip('${d.key}','${d.cls}','${containerId}',${type==='wbs'?'wbsActiveChips':'isActiveChips'},'filter${type.toUpperCase()}')">${d.label}</span>`).join('');
+}
+function toggleChip(key,cls,cid,setRef,filterFn){
+  if(setRef.has(key))setRef.delete(key);else setRef.add(key);
+  const chips=document.getElementById(cid).querySelectorAll('.chip');
+  WBS_CHIP_DEFS.concat(IS_CHIP_DEFS).forEach((d,i)=>{
+    const chip=document.getElementById(cid).querySelector(`[onclick*="'${d.key}'"]`);
+    if(chip){chip.className='chip '+(setRef.has(d.key)?d.cls:'');}
+  });
+  window[filterFn]();
+}
+
+// ============================================================
+// フィルター
+// ============================================================
+const WBS_STATUS_INFO={done:{label:'完了',cls:'b-green'},inprogress:{label:'進行中',cls:'b-blue'},warning:{label:'要注意',cls:'b-amber'},delayed:{label:'遅延中',cls:'b-amber'},overdue:{label:'期限超過',cls:'b-red'},notstarted:{label:'未着手',cls:'b-gray'}};
+
+function filterWBS(){
+  if(!DATA.wbs)return;
+  const phase=gv('wf-phase'),assignee=gv('wf-assignee');
+  const f=DATA.wbs.tasks.filter(t=>{
+    const chipKey=t.isSuspect?'suspect':t.status;
+    if(!wbsActiveChips.has(chipKey)&&!wbsActiveChips.has(t.status))return false;
+    if(t.isSuspect&&!wbsActiveChips.has('suspect'))return false;
+    if(!t.isSuspect&&!wbsActiveChips.has(t.status))return false;
+    if(phase&&(t.lv2||t.lv1)!==phase)return false;
+    if(assignee&&t.assignee!==assignee)return false;
+    return true;
+  });
+  document.getElementById('wf-count').textContent=`${f.length} / ${DATA.wbs.tasks.length}件`;
+  const el=document.getElementById('wbs-body'),em=document.getElementById('wbs-empty');
+  if(f.length===0){el.innerHTML='';em.style.display='block'}
+  else{em.style.display='none';el.innerHTML=f.map(t=>{
+    const si=t.isSuspect?{label:'⚠️ 要確認',cls:'b-orange'}:WBS_STATUS_INFO[t.status]||{label:'—',cls:'b-gray'};
+    const rowBg=t.status==='overdue'||t.status==='delayed'?'#fff8f8':t.isSuspect?'#fff5ee':'';
+    return`<tr style="background:${rowBg}"><td><span class="badge ${si.cls}">${si.label}</span></td><td style="color:var(--muted);font-size:11px;white-space:nowrap">${t.lv2||t.lv1||'—'}</td><td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500" title="${t.task}">${t.task}</td><td style="white-space:nowrap">${t.assignee||'—'}</td><td style="text-align:center;font-weight:700">${t.prog!=null?pct(t.prog):'<span class="missing">—</span>'}</td><td style="text-align:center;color:var(--muted)">${pct(t.planProg)}</td><td style="white-space:nowrap;${t.status==='overdue'?'color:var(--red);font-weight:700':''}">${fmtD(t.endP)}</td></tr>`;
+  }).join('')}
+}
+
+function filterIQ(){
+  if(!DATA.iq)return;
+  const st=gv('iq-f-st'),as=gv('iq-f-as'),ca=gv('iq-f-ca'),ty=gv('iq-f-ty');
+  const f=DATA.iq.items.filter(r=>{
+    if(st&&r.status!==st)return false;
+    if(as&&(r.assignee||'未割当')!==as)return false;
+    if(ca&&r.category!==ca)return false;
+    if(ty&&r.type!==ty)return false;
+    return true;
+  });
+  document.getElementById('iq-count').textContent=`${f.length} / ${DATA.iq.total}件`;
+  const stCls={'完了':'b-green','回答済':'b-green','一次回答済':'b-amber','未設定':'b-red'};
+  const el=document.getElementById('iq-body'),em=document.getElementById('iq-empty');
+  if(f.length===0){el.innerHTML='';em.style.display='block'}
+  else{em.style.display='none';el.innerHTML=f.map(r=>{
+    const ec=r.elapsed!=null?(r.elapsed>=21?'bad':r.elapsed>=14?'warn':''):'';
+    return`<tr><td style="white-space:nowrap;font-size:11px">${fmtD(r.date)}</td><td style="white-space:nowrap">${r.poster}</td><td><span class="badge b-gray">${r.type||'—'}</span></td><td><span class="badge ${stCls[r.status]||'b-gray'}">${r.status||'未設定'}</span></td><td><span class="badge b-blue">${r.category||'—'}</span></td><td style="${!r.assignee?'color:var(--red);font-weight:700':''}">${r.assignee||'未割当'}</td><td class="${ec}">${r.elapsed!=null?r.elapsed+'日':'—'}</td><td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px" title="${r.content}">${r.content.slice(0,45)}</td></tr>`;
+  }).join('')}
+}
+
+function filterIS(){
+  if(!DATA.is)return;
+  const pr=gv('is-f-pr'),ca=gv('is-f-ca');
+  const priCls={'クリティカル':'b-red','高':'b-red','中':'b-amber','低':'b-gray'};
+  const stCls={'進行中':'b-blue','起票':'b-gray','完了':'b-green','クローズ':'b-green'};
+  const f=DATA.is.items.filter(r=>{
+    const isClosed=!r.isOpen;
+    if(r.isOpen&&!isActiveChips.has('open'))return false;
+    if(isClosed&&!isActiveChips.has('closed'))return false;
+    if(pr&&r.priority!==pr)return false;
+    if(ca&&r.category!==ca)return false;
+    return true;
+  });
+  document.getElementById('is-count').textContent=`${f.length} / ${DATA.is.total}件`;
+  const el=document.getElementById('is-body'),em=document.getElementById('is-empty');
+  if(f.length===0){el.innerHTML='';em.style.display='block'}
+  else{em.style.display='none';el.innerHTML=f.map(r=>`<tr style="background:${r.priority==='クリティカル'&&r.isOpen?'#fff8f8':r.isOverdue?'#fff5ee':''}">
+    <td><span class="badge ${stCls[r.status]||'b-gray'}">${r.status||'—'}</span></td>
+    <td><span class="badge ${priCls[r.priority]||'b-gray'}">${r.priority||'—'}</span></td>
+    <td style="white-space:nowrap;font-size:11px">${fmtD(r.startDate)}</td>
+    <td style="white-space:nowrap;font-size:11px;${r.isOverdue?'color:var(--red);font-weight:700':''}">${fmtD(r.dueDate)}${r.isOverdue?' ⚠️':''}</td>
+    <td style="white-space:nowrap;font-size:11px">${r.category||'—'}</td>
+    <td style="max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500;font-size:11px" title="${r.summary}">${r.summary.slice(0,40)}</td>
+    <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:var(--muted)" title="${r.progress}">${r.progress.slice(0,35)||'—'}</td>
+  </tr>`).join('')}
+}
+
+function resetWBS(){['wf-phase','wf-assignee'].forEach(id=>document.getElementById(id).value='');filterWBS()}
+function resetIQ(){['iq-f-st','iq-f-as','iq-f-ca','iq-f-ty'].forEach(id=>document.getElementById(id).value='');filterIQ()}
+function resetIS(){['is-f-pr','is-f-ca'].forEach(id=>document.getElementById(id).value='');filterIS()}
+
+// ============================================================
+// タブ切り替え
+// ============================================================
+function sw(id,btn){
+  document.querySelectorAll('#main>.tab-panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab-bar>.tab').forEach(b=>b.classList.remove('active'));
+  document.getElementById('tab-'+id).classList.add('active');btn.classList.add('active');
+}
+
+// ============================================================
+// ユーティリティ
+// ============================================================
+const pct=v=>Math.round(v*100)+'%';
+const r=v=>Math.round(v*100);
+const fmtD=d=>d?`${d.getMonth()+1}/${d.getDate()}`:'—';
+const fmtNow=()=>{const n=new Date();return`${n.getMonth()+1}/${n.getDate()} ${n.getHours()}:${String(n.getMinutes()).padStart(2,'0')}`};
+const s=v=>v==null?'':String(v).trim();
+const gv=id=>document.getElementById(id).value;
+
+function parseDate(val){
+  if(!val||val==='')return null;
+  if(val instanceof Date)return isNaN(val)?null:val;
+  const m=String(val).match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+  if(m)return new Date(+m[1],+m[2]-1,+m[3]);
+  const d=new Date(val);return isNaN(d)?null:d;
+}
+
+function setOpts(id,vals){
+  const sel=document.getElementById(id);if(!sel)return;
+  const cur=sel.value;
+  while(sel.options.length>1)sel.remove(1);
+  vals.forEach(v=>{const o=document.createElement('option');o.value=v;o.textContent=v;sel.appendChild(o)});
+  if(vals.includes(cur))sel.value=cur;
+}
+
+function setLog(msg,type=''){
+  const bar=document.getElementById('log-bar');
+  bar.style.display='flex';bar.className=type?`log-bar ${type}`:'log-bar';
+  document.getElementById('log-msg').textContent=msg;
+}
+</script>
+</body>
+</html>
